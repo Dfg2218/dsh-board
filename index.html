@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
 <title>D经理 · 看板入口</title>
 <style>
   :root { color-scheme: light dark; }
@@ -42,24 +43,55 @@
   </div>
 
 <script>
-(async function () {
-  const urlEl = document.getElementById('url');
-  const go = document.getElementById('go');
-  const ts = document.getElementById('ts');
-  function show(u, t) {
-    urlEl.textContent = u || '（暂未获取到地址）';
-    if (u) go.href = u;
-    ts.textContent = t || new Date().toLocaleString('zh-CN', { hour12: false });
-  }
+// 直接查 GitHub API / raw（比 GitHub Pages 构建快得多，几秒内就能拿到最新地址）
+var OWNER = "Dfg2218", REPO = "dsh-board", BRANCH = "main";
+var urls = [
+  "https://api.github.com/repos/" + OWNER + "/" + REPO + "/contents/url.json?ref=" + BRANCH,
+  "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/" + BRANCH + "/url.json",
+  "./url.json"
+];
+var urlEl = document.getElementById('url');
+var go = document.getElementById('go');
+var ts = document.getElementById('ts');
+
+function b64utf8(b64) {
   try {
-    const r = await fetch('./url.json?t=' + Date.now(), { cache: 'no-store' });
-    const j = await r.json();
-    show(j.url, j.updated_bj);
+    var bin = atob(b64.replace(/\n/g, ''));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (e) { return ''; }
+}
+function show(u, t) {
+  urlEl.textContent = u || '（暂未获取到地址）';
+  if (u) go.href = u;
+  ts.textContent = t || new Date().toLocaleString('zh-CN', { hour12: false });
+}
+async function tryFetch(i) {
+  if (i >= urls.length) { show('', null); return; }
+  var u = urls[i];
+  try {
+    var r = await fetch(u + (u.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    var text = await r.text();
+    var j;
+    if (u.indexOf('api.github.com') >= 0) {
+      j = JSON.parse(b64utf8(JSON.parse(text).content));
+    } else {
+      j = JSON.parse(text);
+    }
+    if (j && j.url) { show(j.url, j.updated_bj); beep(j.url); return; }
+    throw new Error('no url');
   } catch (e) {
-    // 兜底：url.json 读不到时直接显示静态链接（publish_board 会写死一个 fallback）
-    show(window.__FALLBACK_URL__, null);
+    tryFetch(i + 1);
   }
-})();
+}
+// 打开按钮时再校一次：如果地址失效，自动换最新
+function beep() {}
+go.addEventListener('click', function (ev) {
+  tryFetch(0);
+});
+tryFetch(0);
 </script>
 </body>
 </html>
