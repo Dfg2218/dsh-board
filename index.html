@@ -23,6 +23,7 @@
   .btn:active { background: #1f7a31; }
   .meta { margin-top: 18px; font-size: 12px; color: #6e7681; line-height: 1.7; }
   .meta a { color: #58a6ff; text-decoration: none; }
+  .hint { min-height: 16px; margin-top: 10px; font-size: 12px; color: #f0b400; line-height: 1.6; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #7ee787;
          margin-right: 6px; vertical-align: middle; }
 </style>
@@ -30,7 +31,7 @@
 <body>
   <div class="card">
     <h1>D经理 · 看板入口</h1>
-    <div class="sub">这个地址永远不变；页面每 20 秒自动查最新地址，你只管点按钮。</div>
+    <div class="sub">这个地址永远不变；页面每 30 秒自动查最新地址，你只管点按钮。</div>
 
     <div class="label">当前看板地址</div>
     <div class="url" id="url">加载中…</div>
@@ -39,48 +40,85 @@
 
     <div class="meta">
       <div><span class="dot"></span>最后更新：<span id="ts">—</span>（<a href="javascript:location.reload()">刷新</a>）</div>
-      <div>按钮打不开：先点上面「刷新」，等 20 秒页面会自动换到最新地址。</div>
+      <div>按钮打不开：先点上面「刷新」，等 30 秒页面会自动换到最新地址。</div>
     </div>
+    <div class="hint" id="hint"></div>
   </div>
 
 <script>
-var OWNER = "Dfg2218", REPO = "dsh-board", BRANCH = "main";
-var urls = [
-  "https://api.github.com/repos/" + OWNER + "/" + REPO + "/contents/url.json?ref=" + BRANCH,
-  "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/" + BRANCH + "/url.json",
-  "./url.json"
-];
-var urlEl = document.getElementById('url');
-var go = document.getElementById('go');
-var ts = document.getElementById('ts');
+(function () {
+  var OWNER = "Dfg2218", REPO = "dsh-board", BRANCH = "main";
+  var urlEl = document.getElementById('url');
+  var go = document.getElementById('go');
+  var ts = document.getElementById('ts');
+  var hint = document.getElementById('hint');
+  var LAST_KEY = 'dsh_board_url_v1';
 
-function b64utf8(b64) {
-  try {
-    var bin = atob(b64.replace(/\n/g, ''));
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder('utf-8').decode(bytes);
-  } catch (e) { return ''; }
-}
-function show(u, t) {
-  urlEl.textContent = u || '（暂未获取到地址）';
-  if (u) go.href = u;
-  ts.textContent = t || new Date().toLocaleString('zh-CN', { hour12: false });
-}
-async function tryFetch(i) {
-  if (i >= urls.length) return;
-  var u = urls[i];
-  try {
-    var r = await fetch(u + (u.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+  // 取地址的顺序（2026-11-02 加固）：
+  // 1) 同源 ./url.json —— 和本页同一个 GitHub Pages 域名，最快最稳，不依赖被墙的 raw/API；
+  // 2) raw.githubusercontent.com —— 国内时通时不通；
+  // 3) api.github.com —— 匿名限流 60 次/小时，只在最后兜底（原来排第一，20 秒轮询 20 分钟就打爆）。
+  function sources() {
+    var t = Date.now();
+    return [
+      { u: './url.json?t=' + t, kind: 'plain' },
+      { u: 'https://raw.githubusercontent.com/' + OWNER + '/' + REPO + '/' + BRANCH + '/url.json?t=' + t, kind: 'plain' },
+      { u: 'https://api.github.com/repos/' + OWNER + '/' + REPO + '/contents/url.json?ref=' + BRANCH + '&t=' + t, kind: 'api' }
+    ];
+  }
+
+  function b64utf8(b64) {
+    try {
+      var bin = atob(b64.replace(/\s/g, ''));
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder('utf-8').decode(bytes);
+    } catch (e) { return ''; }
+  }
+
+  function show(u, t, stale) {
+    if (!u) return false;
+    urlEl.textContent = u;
+    go.href = u;
+    ts.textContent = t || new Date().toLocaleString('zh-CN', { hour12: false });
+    hint.textContent = stale ? '⚠ 网络没取到最新地址，先用上次的；点「刷新」再试。' : '';
+    try { localStorage.setItem(LAST_KEY, JSON.stringify({ url: u, t: ts.textContent })); } catch (e) {}
+    return true;
+  }
+
+  function showCached() {
+    try {
+      var j = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
+      if (j && j.url) { show(j.url, j.t, true); return; }
+    } catch (e) {}
+    urlEl.textContent = '获取失败，请点「刷新」重试';
+    hint.textContent = '一直失败的话：直接用手机浏览器打开上方地址，或稍等 30 秒再刷新。';
+  }
+
+  async function fetchSource(s) {
+    var r = await fetch(s.u, { cache: 'no-store' });
     if (!r.ok) throw new Error('http ' + r.status);
     var text = await r.text();
-    var j = u.indexOf('api.github.com') >= 0 ? JSON.parse(b64utf8(JSON.parse(text).content)) : JSON.parse(text);
-    if (j && j.url) { show(j.url, j.updated_bj); return; }
-    throw new Error('no url');
-  } catch (e) { tryFetch(i + 1); }
-}
-tryFetch(0);
-setInterval(function () { tryFetch(0); }, 20000);
+    var j = s.kind === 'api' ? JSON.parse(b64utf8(JSON.parse(text).content || '')) : JSON.parse(text);
+    if (!j || !j.url) throw new Error('no url');
+    return j;
+  }
+
+  async function refresh() {
+    var list = sources();
+    for (var i = 0; i < list.length; i++) {
+      try {
+        var j = await fetchSource(list[i]);
+        show(j.url, j.updated_bj, false);
+        return;
+      } catch (e) { /* 换下一个源 */ }
+    }
+    if (urlEl.textContent === '加载中…') showCached();
+  }
+
+  refresh();
+  setInterval(refresh, 30000);
+})();
 </script>
 </body>
 </html>
