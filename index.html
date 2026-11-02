@@ -22,6 +22,7 @@
          padding: 16px; border-radius: 12px; background: #238636; color: #fff; letter-spacing: 1px; }
   .btn:active { background: #1f7a31; }
   .meta { margin-top: 18px; font-size: 12px; color: #6e7681; line-height: 1.7; }
+  .meta a { color: #58a6ff; text-decoration: none; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #7ee787;
          margin-right: 6px; vertical-align: middle; }
 </style>
@@ -29,7 +30,7 @@
 <body>
   <div class="card">
     <h1>D经理 · 看板入口</h1>
-    <div class="sub">这个地址永远不变；后台换地址会自动更新，你只管点下面的按钮。</div>
+    <div class="sub">这个地址永远不变；页面每 20 秒自动查最新地址，你只管点按钮。</div>
 
     <div class="label">当前看板地址</div>
     <div class="url" id="url">加载中…</div>
@@ -37,13 +38,12 @@
     <a class="btn" id="go" href="#" target="_blank" rel="noopener">打开看板 →</a>
 
     <div class="meta">
-      <div><span class="dot"></span>最后更新：<span id="ts">—</span></div>
-      <div>如果打不开：等 2 分钟刷新本页，后台会自动修复隧道并更新地址。</div>
+      <div><span class="dot"></span>最后更新：<span id="ts">—</span>（<a href="javascript:location.reload()">刷新</a>）</div>
+      <div>按钮打不开：先点上面「刷新」，等 20 秒页面会自动换到最新地址。</div>
     </div>
   </div>
 
 <script>
-// 直接查 GitHub API / raw（比 GitHub Pages 构建快得多，几秒内就能拿到最新地址）
 var OWNER = "Dfg2218", REPO = "dsh-board", BRANCH = "main";
 var urls = [
   "https://api.github.com/repos/" + OWNER + "/" + REPO + "/contents/url.json?ref=" + BRANCH,
@@ -68,30 +68,19 @@ function show(u, t) {
   ts.textContent = t || new Date().toLocaleString('zh-CN', { hour12: false });
 }
 async function tryFetch(i) {
-  if (i >= urls.length) { show('', null); return; }
+  if (i >= urls.length) return;
   var u = urls[i];
   try {
     var r = await fetch(u + (u.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('http ' + r.status);
     var text = await r.text();
-    var j;
-    if (u.indexOf('api.github.com') >= 0) {
-      j = JSON.parse(b64utf8(JSON.parse(text).content));
-    } else {
-      j = JSON.parse(text);
-    }
-    if (j && j.url) { show(j.url, j.updated_bj); beep(j.url); return; }
+    var j = u.indexOf('api.github.com') >= 0 ? JSON.parse(b64utf8(JSON.parse(text).content)) : JSON.parse(text);
+    if (j && j.url) { show(j.url, j.updated_bj); return; }
     throw new Error('no url');
-  } catch (e) {
-    tryFetch(i + 1);
-  }
+  } catch (e) { tryFetch(i + 1); }
 }
-// 打开按钮时再校一次：如果地址失效，自动换最新
-function beep() {}
-go.addEventListener('click', function (ev) {
-  tryFetch(0);
-});
 tryFetch(0);
+setInterval(function () { tryFetch(0); }, 20000);
 </script>
 </body>
 </html>
