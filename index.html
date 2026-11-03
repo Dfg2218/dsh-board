@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-store">
-<title>D经理 · 看板入口</title>
+<title>D经理 · 入口</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -21,6 +21,10 @@
   .btn { display: block; text-align: center; text-decoration: none; font-weight: 600; font-size: 17px;
          padding: 16px; border-radius: 12px; background: #238636; color: #fff; letter-spacing: 1px; }
   .btn:active { background: #1f7a31; }
+  .btn.sim { margin-top: 10px; background: #b62324; }
+  .btn.sim:active { background: #8f1b1c; }
+  .row2 { display: flex; gap: 8px; }
+  .row2 .btn { flex: 1; font-size: 15px; padding: 13px; }
   .meta { margin-top: 18px; font-size: 12px; color: #6e7681; line-height: 1.7; }
   .meta a { color: #58a6ff; text-decoration: none; }
   .hint { min-height: 16px; margin-top: 10px; font-size: 12px; color: #f0b400; line-height: 1.6; }
@@ -30,16 +34,18 @@
 </head>
 <body>
   <div class="card">
-    <h1>D经理 · 看板入口</h1>
+    <h1>D经理 · 入口</h1>
     <div class="sub">这个地址永远不变；页面每 30 秒自动查最新地址，你只管点按钮。</div>
 
-    <div class="label">当前看板地址</div>
+    <div class="label">当前地址（每次重启会变，本页自动更新）</div>
     <div class="url" id="url">加载中…</div>
 
-    <a class="btn" id="go" href="#" target="_blank" rel="noopener">打开看板 →</a>
+    <a class="btn" id="go" href="#" target="_blank" rel="noopener">打开看板（老版） →</a>
+    <a class="btn sim" id="goSim" href="#" target="_blank" rel="noopener">模拟投注（新版） →</a>
 
     <div class="meta">
       <div><span class="dot"></span>最后更新：<span id="ts">—</span>（<a href="javascript:location.reload()">刷新</a>）</div>
+      <div>老版看板 = 分析/推荐/结算；新版 = 模拟选单（含多人方案、输赢回看）。两个页面同一台机器、同一份数据，不冲突。</div>
       <div>按钮打不开：先点上面「刷新」，等 30 秒页面会自动换到最新地址。</div>
     </div>
     <div class="hint" id="hint"></div>
@@ -50,6 +56,7 @@
   var OWNER = "Dfg2218", REPO = "dsh-board", BRANCH = "main";
   var urlEl = document.getElementById('url');
   var go = document.getElementById('go');
+  var goSim = document.getElementById('goSim');
   var ts = document.getElementById('ts');
   var hint = document.getElementById('hint');
   var LAST_KEY = 'dsh_board_url_v1';
@@ -80,6 +87,7 @@
     if (!u) return false;
     urlEl.textContent = u;
     go.href = u;
+    if (goSim) goSim.href = u.replace(/\/+$/, '') + '/sim';
     ts.textContent = t || new Date().toLocaleString('zh-CN', { hour12: false });
     hint.textContent = stale ? '⚠ 网络没取到最新地址，先用上次的；点「刷新」再试。' : '';
     try { localStorage.setItem(LAST_KEY, JSON.stringify({ url: u, t: ts.textContent })); } catch (e) {}
